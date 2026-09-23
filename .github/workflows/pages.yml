@@ -1,0 +1,52 @@
+# Builds the site (web/dist) and publishes it on GitHub Pages at https://flybrain-fpv.domi.zip on every push to main.
+#
+# One-time setup in the repository: Settings > Pages > Source: "GitHub Actions", and Custom domain:
+# flybrain-fpv.domi.zip (then Enforce HTTPS: WebGPU needs a secure context). DNS: a CNAME record for
+# flybrain-fpv.domi.zip pointing at slickdomi.github.io. A CNAME file in the build is not needed with Actions.
+#
+# Every action is pinned to a full commit SHA, each the newest release at least two weeks old when it was pinned
+# (2026-09-24; the dependency cooldown in .npmrc applies the same rule to npm).
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# one deployment at a time; a newer push waits rather than cancelling one that is publishing
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      # the lockfile pins every package; --ignore-scripts: nothing here needs an install script
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      # typechecks, then builds web/dist (relative paths, so it works at the domain root or under /<repo>/)
+      - run: npm run build
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

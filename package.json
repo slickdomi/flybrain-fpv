@@ -1,0 +1,19 @@
+{
+  "name": "flybrain-fpv",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build -w flybrain-fpv-web",
+    "typecheck": "npm run typecheck -w flybrain && npm run typecheck -w flybrain-fpv-web",
+    "dev": "npm run dev -w flybrain-fpv-web"
+  },
+  "devDependencies": {
+    "@webgpu/types": "0.1.72",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
+  }
+}

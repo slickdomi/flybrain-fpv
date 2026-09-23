@@ -1,0 +1,13 @@
+{
+  "name": "flybrain-fpv-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "flybrain": "0.1.0"
+  }
+}

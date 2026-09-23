@@ -1,0 +1,7 @@
+node_modules/
+dist/
+data/raw/
+.cache/
+__pycache__/
+results/
+dist-*/

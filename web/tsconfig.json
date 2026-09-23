@@ -1,0 +1,7 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "customConditions": ["flybrain-source"]
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "flybrain",
+  "version": "0.1.0",
+  "description": "The whole male fruit fly connectome (MaleCNS v1.0, 166,700 neurons) simulated in real time on WebGPU or the CPU. Vendored from fly-addiction (itself vendored from fly-games, with a scene-sampling compute eye).",
+  "keywords": ["connectome", "drosophila", "neuroscience", "webgpu", "spiking-neural-network"],
+  "license": "MIT",
+  "author": "SlickDomi",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "flybrain-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  }
+}

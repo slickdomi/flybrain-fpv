@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flybrain FPV</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪰</text></svg>" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main id="stage">
+      <canvas id="view"></canvas>
+      <canvas id="osd" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none"></canvas>
+
+      <div id="loading">
+        <div id="loadLabel">Waking the fly up…</div>
+        <div id="loadTrack"><span id="loadBar"></span></div>
+        <div id="loadError" hidden></div>
+        <button id="start" type="button" hidden>Fly</button>
+      </div>
+
+      <div id="banner"></div>
+
+      <header id="title">
+        <h1>FLYBRAIN FPV</h1>
+        <p>A real fruit fly brain, all 166,700 neurons, flying a drone through its own eyes.</p>
+      </header>
+
+      <section id="score" aria-label="Flight">
+        <div class="game"><b id="carsDestroyed">0</b><span>trucks destroyed</span></div>
+        <div class="game"><b id="dronesLost">0</b><span>drones lost</span></div>
+        <div class="game"><b id="grenadesLeft">3</b><span>grenades</span></div>
+        <div><b id="flightTime">0s</b><span>flight</span></div>
+        <div><b id="rams">0</b><span>truck rams</span></div>
+        <div><b id="hits">0</b><span>tree hits</span></div>
+        <div><b id="escapes">0</b><span>escapes</span></div>
+        <div><b id="seizures">0</b><span>seizures</span></div>
+      </section>
+
+      <div id="toolbar">
+        <button id="viewBtn" type="button">View</button>
+        <button id="aheadBtn" type="button">Target ahead</button>
+        <button id="pauseBtn" type="button">Pause</button>
+        <button id="grenadeBtn" type="button">Drop grenade (G)</button>
+        <button id="trucksBtn" type="button" disabled>Respawn trucks</button>
+        <span id="hint"></span>
+        <span id="paintInfo"></span>
+      </div>
+
+      <footer id="brainstats"></footer>
+    </main>
+
+    <aside id="panel">
+      <!-- sections can be collapsed, pinned to the top and dragged by their grip (ui/panel.ts); remembered per browser -->
+      <div class="panel-col" data-column="main">
+        <div class="card" data-section="motor">
+          <h2>Motor output <small>what the drone listens to</small></h2>
+          <div class="meter"><label>DNa02 steering <small>left / right</small></label>
+            <div class="lr"><div class="bar left"><span id="dnaL"></span></div><div class="bar"><span id="dnaR"></span></div></div></div>
+          <div class="meter"><label>DNp53 pitch <small>down / up</small></label>
+            <div class="lr"><div class="bar left"><span id="pitchDown"></span></div><div class="bar"><span id="pitchUp"></span></div></div></div>
+          <div class="meter"><label>DNp01 giant fiber <small>a burst makes the drone hop</small></label>
+            <div class="bar"><span id="gf"></span></div></div>
+          <div class="meter"><label>MDN moonwalker <small>not wired up</small></label>
+            <div class="bar"><span id="mdn"></span></div></div>
+          <div class="meter"><label>LC10a <small>small dark things, left / right</small></label>
+            <div class="lr"><div class="bar left"><span id="lcL"></span></div><div class="bar"><span id="lcR"></span></div></div></div>
+          <div class="meter"><label>LC4 + LPLC2 <small>looming, left / right</small></label>
+            <div class="lr"><div class="bar left"><span id="loomL"></span></div><div class="bar"><span id="loomR"></span></div></div></div>
+        </div>
+
+        <div class="card" data-section="target">
+          <h2>Target <small>right-click a truck, or press F</small></h2>
+          <p>Target: <b id="foodTarget">nothing</b></p>
+          <div class="meter"><label>Learned want <small>left / right mushroom body</small></label>
+            <div class="lr"><div class="bar left"><span id="wantL"></span></div><div class="bar"><span id="wantR"></span></div></div></div>
+          <p id="foodStats" class="stat"></p>
+          <button id="mbBtn" type="button" class="toggle">Target help</button>
+          <button id="forestBtn" type="button" class="toggle">Forest mode</button>
+          <p class="note">The target shows up black to the fly, and the LC10a cells facing it get a nudge. From there the fly steers itself. Close in, a dive assist takes over the pitch, which the fly is bad at.</p>
+        </div>
+
+        <div class="card" data-section="stimulate">
+          <h2>Stimulate <small>hold a number key or a button</small></h2>
+          <div class="mv"><label for="mv">Drive</label><input id="mv" type="range" min="2" max="20" step="1" /><span id="mvLabel"></span></div>
+          <div id="stims"></div>
+        </div>
+
+        <div class="card" data-section="eyes">
+          <h2>What the eyes send <small>one hexagon per eye column</small></h2>
+          <canvas id="eye"></canvas>
+        </div>
+
+        <div class="card" data-section="brain">
+          <h2>Brain <small>every neuron, drag to spin it</small></h2>
+          <canvas id="brain"></canvas>
+        </div>
+
+        <div class="card real" data-section="real">
+          <h2>What is real</h2>
+          <p><b>What the fly does:</b> every neuron and synapse is the real fly's. It sees the world through its own eyes and decides which way to turn and climb.</p>
+          <p><b>What the game does:</b> everything else. The drone and its speed, how the fly's firing rates turn into flight, the escape hop, the target marker and dive assist, and the world: trucks, road, trees, bomb, respawns. The fly sees the trucks as grey boxes, the target in black. It never sees explosions or wrecks, and its brain keeps running while a drone is down.</p>
+        </div>
+        <div class="panel-foot">
+          <button id="resetLayout" type="button" title="Put every section back where it started, expanded and unpinned">Reset layout</button>
+        </div>
+      </div>
+    </aside>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
