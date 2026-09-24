@@ -53,7 +53,8 @@ body { display: flex; overflow: hidden; }
 #banner.show { opacity: 1; }
 
 /* the repository and Ko-fi, bottom right of the view (as in the other fly projects) */
-#links { position: absolute; right: 16px; bottom: 12px; display: flex; gap: 8px; }
+/* above the loading screen too (z-index 10): the longest wait is the download */
+#links { position: absolute; right: 16px; bottom: 12px; display: flex; gap: 8px; z-index: 11; }
 #links a {
   display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-size: 12px;
   font-weight: 600; color: var(--text); text-decoration: none; background: #000a; border: 1px solid var(--line);
