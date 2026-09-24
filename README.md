@@ -2,7 +2,7 @@
 
 A male fruit fly's connectome flies an FPV strike drone through its own compound eyes, live in the browser on WebGPU. You pick a truck; the fly chases it through a burnt forest; the drone blows up on contact with anything.
 
-**Play it at [flybrain-fpv.domi.zip](https://flybrain-fpv.domi.zip)** in a browser with WebGPU (recent Chrome or Edge; Safari 26; Firefox with WebGPU switched on). It downloads the 38 MB connectome first.
+**Play:** https://flybrain-fpv.domi.zip (needs WebGPU: recent Chrome or Edge, Safari 26, or Firefox with WebGPU switched on; it downloads the 38 MB connectome first) · by SlickDomi · [Support on Ko-fi](https://ko-fi.com/domi_zip)
 
 All 166,700 neurons of [MaleCNS v1.0](https://male-cns.janelia.org/) run in real time: 13.2 M spiking and 3.9 M graded connections. The simulation is [`flybrain`](packages/flybrain), vendored unchanged from `../fly-addiction` (which took it from `../fly-games` and added a compute eye that samples the scene on the GPU).
 
@@ -10,7 +10,7 @@ All 166,700 neurons of [MaleCNS v1.0](https://male-cns.janelia.org/) run in real
 
 **The fly:** every neuron and synapse is the real fly's. It sees the world through its own eyes and decides which way to turn and climb, and when to jump.
 
-**The game:** everything else. The drone and its speed, the gains that turn firing rates into flight, the escape hop, the target marker, the painting, the lock and the dive assist, the turn away from looming trees, and the world: trucks, road, trees, the warhead, the respawns.
+**The game:** everything else. The drone and its speed, the gains that turn firing rates into flight, the escape hop, the target marker, the painting, the lock and the dive assist, the turn away from looming trees, the altitude limit, and the world: trucks, road, trees, the warhead, the respawns.
 
 | drone | driven by | from |
 |---|---|---|
@@ -35,7 +35,7 @@ sh scripts/dev.sh          # http://localhost:5173 (PORT= to change) in a WebGPU
 - **Drag on the FPV or eye view** to paint a phantom: the LC10a cells looking at the pointer get a constant drive, and the fly turns toward it.
 - **Hold 1–9** (or the side-panel buttons) to drive a cell group: LC10a L/R, DNa02 L/R, DNp53, LC4, DNp01, MDN (read only, not wired to the drone), P1. The *Drive* slider sets the mV.
 - **Space** (or **Pause**) pauses; **Target ahead** does what F does.
-- **The side panel:** click a section's title to collapse it, the pin to keep it at the top while the rest scrolls, and drag its grip (or focus the grip and use the arrow keys) to move it. The layout is remembered in the browser; **Reset layout** at the bottom puts it back.
+- **The side panel:** click a section's title to collapse it, and its pin to move it to the top and keep it there while the rest scrolls (unpinning puts it back). Drag its grip, with a mouse or a finger, to move it (or focus the grip and use the arrow keys). The layout is remembered in the browser; **Reset layout** at the bottom puts it back. **Source** and **Support on Ko-fi** are at the bottom right of the view.
 - **On a phone:** tap a truck to make it the target (a tap near one counts), drag a finger to paint a phantom (a finger held still paints too), and pinch to zoom. Hold a stimulus button with a finger. The view traces fewer pixels when the phone falls behind (down to half, `LOOP.minRenderScale`) before it slows the brain, and the panel's brain and eye views stop drawing while they are scrolled away. A phone GPU is much slower than a desktop one, so expect the brain, and with it the whole game, to run slower than real time; the OSD's BRAIN figure shows by how much.
 
 Every contact is fatal: a trunk, the ground or a truck sets off the warhead. A new drone launches from the start 3 s later with a fresh brain: its spiking state is cleared, as after a seizure, and it waits 1.5 s before it steers (`GAME.resetBrainOnRespawn`; `?brainreset=0` keeps the old brain running). A seizure (the lLN1_bc clique running away) reboots the spiking state and drops every held stimulus.
@@ -52,6 +52,7 @@ Nothing in the connectome knows what a truck is, so the game tells the fly where
 - **Painting:** while the target is in view, the LC10a cells whose receptive field lies within 15° of it get 20 mV.
 - **Lock:** with the target within 40° ahead and 30 units, the escape hop is off (otherwise every approach turns into a retreat), the yaw adaptation is held (otherwise it cancels a steady turn), and the drone speeds up to 2×.
 - **Dive assist:** inside 15 units, the pitch is steered at the target. The fly's pitch pathway can't bring the drone down onto a truck. Left and right stay the fly's.
+- **Altitude limit:** above 10 units the gaze is pulled toward a gentle descent (harder the higher it is), and 14 is a hard ceiling. Left alone, the fly's pitch pathway could climb to 20-30 units and stay there, out of the lock's reach.
 - Painting and the marker switch off inside 6 units. With them on, the brain seized about 1.5 times per hit, just before contact.
 
 `?food=none|marker|paint|both|learn` picks the drive; `both` is the default. `learn` is fly-addiction's mushroom-body drive (reward dopamine while the target is in view, a learned-value readout that steers). It was the worst arm in the comparison, and it changes the brain (KC→KC silenced, ×20 visual gain into the Kenyon cells).

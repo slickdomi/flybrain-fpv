@@ -86,7 +86,8 @@ export const DRONE = {
   /** above the canopies (WORLD.canopyY + canopyRadius = 5.3); was 6, inside them. Also the respawn altitude. */
   startAlt: 8,
   floor: 0.6,
-  ceiling: 30,
+  /** the drone can't go higher (ALTITUDE pulls it down well before; was 30, where it could fly out of the lock's reach) */
+  ceiling: 14,
   /** body radius for collisions */
   radius: 0.5,
   /** 1/s, how fast heading and pitch rate follow the command (rotor inertia) */
@@ -437,4 +438,18 @@ export const FOREST = {
   default: true,
   trunkRadius: 1,
   avoidGain: 6,
+};
+
+/**
+ * MODELED: an altitude limit. The fly's pitch pathway can climb for good (DNp53 up while the looming cells quieten
+ * high above the trunks: runs spent 77% of their time above 14 units), and from 20-30 units up a truck is out of the
+ * target lock's reach. Above softAlt the gaze is pulled toward a descent, descentPerUnit deg per unit above it (at
+ * most maxDescent), at pullGain per second; the brain's own pitch command still adds on top. DRONE.ceiling is the
+ * hard limit. Off while the dive assist has the pitch.
+ */
+export const ALTITUDE = {
+  softAlt: 10,
+  descentPerUnit: 4,
+  maxDescent: 25,
+  pullGain: 1.5,
 };

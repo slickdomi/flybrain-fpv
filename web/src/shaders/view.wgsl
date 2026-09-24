@@ -1920,11 +1920,10 @@ fn fpvFrame(uv0: vec2f, pix: vec2f) -> vec3f {
 
 @fragment
 fn post(in: VsOut) -> @location(0) vec4f {
-  if (view.mode != 3.0) {
-    let dims = vec2i(textureDimensions(frameTex));
-    let px = clamp(vec2i(in.pos.xy), vec2i(0), dims - vec2i(1));
-    return vec4f(textureLoad(frameTex, px, 0).rgb, 1.0);
-  }
   let uv = vec2f(in.ndc.x * 0.5 + 0.5, 0.5 - in.ndc.y * 0.5);
+  if (view.mode != 3.0) {
+    // by uv, not by pixel: the frame is smaller than the canvas once the render scale drops (renderer.resScale)
+    return vec4f(textureSampleLevel(frameTex, frameSamp, uv, 0.0).rgb, 1.0);
+  }
   return vec4f(fpvFrame(uv, in.pos.xy), 1.0);
 }

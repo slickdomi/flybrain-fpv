@@ -99,23 +99,42 @@ await page.waitForTimeout(3000);
 const t2 = await state();
 check(t2.cars.every((c, i) => c && Math.abs(c.s - t1.cars[i].s) > 0.5), "every truck drives again");
 
-// the side panel: collapse a section, pin one, the layout saved; Reset layout undoes both
+// the chase view at half resolution (as after slow frames, renderer.resScale): the whole view, scaled up
+await page.evaluate(() => (window.flybrainFpv.renderer.resScale = 0.5));
+await page.waitForTimeout(50);
+await page.screenshot({ path: `${out}/half-res.png` });
+
+// the side panel: collapse a section; pin one (it moves to the top, and back when unpinned); drag one by its grip
+const order = () => page.evaluate(() => [...document.querySelectorAll(".panel-col > .card")].map((c) => c.dataset.section));
+const before = await order();
 await page.click('[data-section="eyes"] .card-toggle');
 await page.click('[data-section="stimulate"] .card-pin');
 const panel = await page.evaluate(() => ({
   collapsed: document.querySelector('[data-section="eyes"]').classList.contains("collapsed"),
   eyeShown: getComputedStyle(document.getElementById("eye")).display !== "none",
-  pinned: getComputedStyle(document.querySelector('[data-section="stimulate"]')).position,
   saved: JSON.parse(localStorage.getItem("flybrainfpv.panel") ?? "null"),
 }));
 check(panel.collapsed && !panel.eyeShown, "a section collapses (its canvas hidden)");
-check(panel.pinned === "sticky", "a pinned section sticks to the top");
+check((await order())[0] === "stimulate", `pinning moves a section to the top (${(await order()).join(", ")})`);
 check(panel.saved?.collapsed?.includes("eyes") && panel.saved?.pinned === "stimulate", "the layout is saved for the next visit");
 await page.screenshot({ path: `${out}/panel.png` });
+await page.click('[data-section="stimulate"] .card-pin');
+check((await order()).join() === before.join(), "unpinning puts it back where it was");
+// drag "What is real" (last) by its grip above the first section
+const grip = await page.$('[data-section="real"] .card-grip');
+await grip.scrollIntoViewIfNeeded();
+const g = await grip.boundingBox();
+const first = await (await page.$('[data-section="motor"]')).boundingBox();
+await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+await page.mouse.down();
+for (let k = 1; k <= 20; k++) await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2 + ((first.y + 5 - g.y) * k) / 20);
+await page.mouse.up();
+check((await order())[0] === "real", `dragging a grip moves a section (${(await order()).join(", ")})`);
 await page.click("#resetLayout");
 check(
-  await page.evaluate(() => !document.querySelector(".card.collapsed") && !document.querySelector(".card.pinned")),
-  "Reset layout expands and unpins everything",
+  (await order()).join() === before.join() &&
+    (await page.evaluate(() => !document.querySelector(".card.collapsed") && !document.querySelector(".card.pinned"))),
+  "Reset layout puts everything back, expanded and unpinned",
 );
 
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(" | ")}` : ""}`);

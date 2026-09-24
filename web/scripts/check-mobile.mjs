@@ -146,15 +146,31 @@ await touch("touchEnd", []);
 await page.waitForTimeout(200);
 check(!(await page.evaluate(() => document.querySelector(".stim").classList.contains("on"))), "and letting go releases it");
 
-// the panel's sections collapse and pin with a tap
+// the panel's sections collapse and pin with a tap (the pinned one moves to the top), and a finger on a grip drags one
+const order = () => page.evaluate(() => [...document.querySelectorAll(".panel-col > .card")].map((c) => c.dataset.section));
 await page.tap('[data-section="eyes"] .card-toggle');
 await page.tap('[data-section="target"] .card-pin');
 check(
-  await page.evaluate(
-    () => document.querySelector('[data-section="eyes"]').classList.contains("collapsed") && document.querySelector('[data-section="target"]').classList.contains("pinned"),
-  ),
-  "a tap collapses a panel section, another pins one",
+  (await page.evaluate(() => document.querySelector('[data-section="eyes"]').classList.contains("collapsed"))) && (await order())[0] === "target",
+  `a tap collapses a section, and one on the pin moves it to the top (${(await order()).join(", ")})`,
 );
+await page.tap('[data-section="target"] .card-pin');
+const grip = await page.$('[data-section="stimulate"] .card-grip');
+await grip.scrollIntoViewIfNeeded();
+const g = await grip.boundingBox();
+const top = await (await page.$('[data-section="motor"]')).boundingBox();
+// the motor card is above: drag up past it (the page scrolls as the finger nears the top edge)
+const gx = g.x + g.width / 2;
+const gy = g.y + g.height / 2;
+await touch("touchStart", [[gx, gy]]);
+for (let k = 1; k <= 20; k++) {
+  await page.waitForTimeout(20);
+  await touch("touchMove", [[gx, gy + ((Math.max(top.y + 5, 60) - gy) * k) / 20]]);
+}
+await page.waitForTimeout(600);
+await touch("touchEnd", []);
+const moved = await order();
+check(moved.indexOf("stimulate") < moved.indexOf("target"), `a finger on a grip drags a section (${moved.join(", ")})`);
 await page.tap("#resetLayout");
 
 // landscape

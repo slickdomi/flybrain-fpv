@@ -17,6 +17,7 @@
         <div id="loadTrack"><span id="loadBar"></span></div>
         <div id="loadError" hidden></div>
         <button id="start" type="button" hidden>Fly</button>
+        <button id="reload" type="button" hidden onclick="location.reload()">Reload</button>
       </div>
 
       <div id="banner"></div>
@@ -48,6 +49,16 @@
       </div>
 
       <footer id="brainstats"></footer>
+      <nav id="links" aria-label="Project links">
+        <a href="https://github.com/slickdomi/flybrain-fpv" target="_blank" rel="noopener" title="Source code on GitHub" aria-label="Source code on GitHub">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.34c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0z" /></svg>
+          <span class="label">Source</span>
+        </a>
+        <a href="https://ko-fi.com/domi_zip" target="_blank" rel="noopener" title="Support on Ko-fi" aria-label="Support on Ko-fi">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M1.5 4h10v5.2A3.8 3.8 0 0 1 7.7 13H5.3A3.8 3.8 0 0 1 1.5 9.2zm10 1h.9a2.3 2.3 0 0 1 0 4.6h-1.1l.2-1.4h.9a.9.9 0 0 0 0-1.8h-.9z" /><path fill="#ff5e5b" d="M6.5 6.2c.7-.7 1.9-.3 1.9.7 0 .9-1.2 1.8-1.9 2.3-.7-.5-1.9-1.4-1.9-2.3 0-1 1.2-1.4 1.9-.7z" /></svg>
+          <span class="label">Support on Ko-fi</span>
+        </a>
+      </nav>
     </main>
 
     <aside id="panel">
@@ -99,7 +110,7 @@
         <div class="card real" data-section="real">
           <h2>What is real</h2>
           <p><b>What the fly does:</b> every neuron and synapse is the real fly's. It sees the world through its own eyes and decides which way to turn and climb.</p>
-          <p><b>What the game does:</b> everything else. The drone and its speed, how the fly's firing rates turn into flight, the escape hop, the target marker and dive assist, and the world: trucks, road, trees, bomb, respawns. The fly sees the trucks as grey boxes, the target in black. It never sees explosions or wrecks, and its brain keeps running while a drone is down.</p>
+          <p><b>What the game does:</b> everything else. The drone and its speed, how the fly's firing rates turn into flight, the escape hop, the target marker and dive assist, the turn away from trees, the altitude limit, and the world: trucks, road, trees, bomb, respawns. The fly sees the trucks as grey boxes, the target in black. It never sees explosions or wrecks, and its brain keeps running while a drone is down.</p>
         </div>
         <div class="panel-foot">
           <button id="resetLayout" type="button" title="Put every section back where it started, expanded and unpinned">Reset layout</button>

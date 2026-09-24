@@ -16,7 +16,7 @@ import {
 import eyeSrc from "./shaders/eye.wgsl?raw";
 import sceneSrc from "./shaders/scene.wgsl?raw";
 import { createBench, type Bench, type Harness } from "./bench";
-import { AVOID, CAR, CONTROL, DATA_URL, FOOD, FOOD_MODES, FOREST, GAME, LOCK, LOOP, MARK, MB, MODEL, PAINT, SEEK, STIMS, TEST_STIMS, WORLD, type FoodMode } from "./config";
+import { ALTITUDE, AVOID, CAR, CONTROL, DATA_URL, FOOD, FOOD_MODES, FOREST, GAME, LOCK, LOOP, MARK, MB, MODEL, PAINT, SEEK, STIMS, TEST_STIMS, WORLD, type FoodMode } from "./config";
 import { LearnedValue } from "./game/mb";
 import { Renderer, VIEW_COUNT, VIEW_NAMES, type Look, type ViewMode } from "./game/render";
 import { Osd } from "./game/osd";
@@ -34,10 +34,15 @@ const num = (key: string, fallback: number) => {
   return query.has(key) && Number.isFinite(v) ? v : fallback;
 };
 
+/** Something stopped the fly: the loading screen comes back (or stays) with the message and a Reload button. */
 function fail(msg: string) {
+  const loading = $("loading");
+  loading.style.display = "";
+  $("start").hidden = true;
   const el = $("loadError");
   el.hidden = false;
   el.textContent = msg;
+  $("reload").hidden = false;
 }
 
 async function main() {
@@ -57,6 +62,15 @@ async function main() {
   $("resetLayout").addEventListener("click", () => panelLayout.reset());
   const loadLabel = $("loadLabel");
   const loadBar = $("loadBar");
+  // a download that stops moving (a phone on a flaky connection): say so, and offer a reload, but keep waiting
+  let lastProgress = performance.now();
+  const stallWatch = window.setInterval(() => {
+    if (!$("start").hidden || !$("loadError").hidden) return window.clearInterval(stallWatch);
+    if (performance.now() - lastProgress > 25000) {
+      loadLabel.textContent = "The download has stopped moving. It may still recover, or reload to start again.";
+      $("reload").hidden = false;
+    }
+  }, 5000);
   const device = await requestFlyDevice().catch((e) => (console.warn("WebGPU init failed:", e), null));
   if (!device) {
     fail("No WebGPU here. Try a recent Chrome, Edge or Safari, or Firefox with WebGPU switched on.");
@@ -102,12 +116,17 @@ async function main() {
       (label, frac) => {
         loadLabel.textContent = label;
         loadBar.style.width = `${Math.round(frac * 100)}%`;
+        lastProgress = performance.now();
       },
     );
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));
     throw e;
   }
+  // downloaded: the rest (building the brain and its shaders on the GPU) reports no progress, which is not a stall
+  window.clearInterval(stallWatch);
+  loadLabel.textContent = "Building the brain on the GPU…";
+  await new Promise((r) => setTimeout(r, 30)); // let that label show before the long synchronous build
   const brain = new GpuBrain(device, data, {
     model: modelParams,
     maxStepsPerCall: LOOP.maxStepsPerFrame,
@@ -236,6 +255,13 @@ async function main() {
     both("DNp53", (n) => rates.slowHz(n)) / 2 - gains.pitchRef * (both("LC4", (n) => rates.slowHz(n)) + both("LPLC2", (n) => rates.slowHz(n)));
   /** deg/s the food drive turns the drone by (0 with ?mb=off, but computed anyway so tests can compare) */
   const mbTurn = () => gains.mbTurn * wantTurn;
+  /** ALTITUDE (MODELED): deg/s pulling the gaze toward a descent above softAlt, fading in over its first unit */
+  const altitudePull = () => {
+    const over = world.y - ALTITUDE.softAlt;
+    if (over <= 0) return 0;
+    const target = -Math.min(ALTITUDE.maxDescent, ALTITUDE.descentPerUnit * over);
+    return ALTITUDE.pullGain * Math.min(1, over) * (target - (world.pitch * 180) / Math.PI);
+  };
   const turnNow = () => gains.yaw * yawCmd + (food.steer ? mbTurn() : 0) + avoidTurn;
   /** one sample per TRACE_MS of brain time, for headless analysis (window.flybrainFpv.trace) */
   const trace: number[][] = [];
@@ -892,7 +918,7 @@ async function main() {
         // diving (?dive, MODELED): the assist steers the pitch toward the food instead of the brain and the spring
         pitchRate: food.diving
           ? LOCK.diveGain * food.diveEl
-          : gains.pitch * pitchCmd - CONTROL.pitchSpring * ((world.pitch * 180) / Math.PI),
+          : gains.pitch * pitchCmd - CONTROL.pitchSpring * ((world.pitch * 180) / Math.PI) + altitudePull(),
         escape: escapeNow,
       };
       if (escapeNow && !world.frozen && !world.droneLost) banner("ESCAPE HOP");
@@ -931,11 +957,15 @@ async function main() {
   const start = $<HTMLButtonElement>("start");
   start.hidden = false;
   start.onclick = () => {
-    $("loading").remove();
+    $("loading").style.display = "none";
     measuring = false;
     last = performance.now();
     requestAnimationFrame(frame);
   };
 }
 
-main();
+main().catch((e) => {
+  // anything that throws while the brain loads or the game is set up, instead of a loading screen that never ends
+  console.error(e);
+  fail(`It stopped while starting: ${e instanceof Error ? e.message : String(e)}`);
+});
