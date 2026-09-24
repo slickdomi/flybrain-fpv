@@ -1,5 +1,5 @@
 // Headless check of the game UI: a destroyed truck stays destroyed, the trucks behind its wreck stop short of it, and
-// the Respawn trucks button brings them back and clears the road; the side panel collapses, pins, saves and resets.
+// the Respawn trucks button brings them back and clears the road; the side panel collapses, pins, floats, saves and resets.
 // Serves DIST like smoke.mjs.
 //
 //   docker run --rm --device /dev/dri/renderD128 --ipc=host -v "$PWD/web:/app:ro" -v "$PWD/.cache/ui:/out" \
@@ -136,6 +136,48 @@ check(
     (await page.evaluate(() => !document.querySelector(".card.collapsed") && !document.querySelector(".card.pinned"))),
   "Reset layout puts everything back, expanded and unpinned",
 );
+
+// floating (desktop): the float button lifts a section out over the view; its grip drags it anywhere; a right-click
+// on the grip docks it back into its place; right-click floats one too, and Reset layout docks everything
+const floatInfo = (id) =>
+  page.evaluate((id) => {
+    const c = document.querySelector(`[data-section="${id}"]`);
+    const r = c.getBoundingClientRect();
+    return {
+      floating: c.classList.contains("floating"),
+      fixed: getComputedStyle(c).position === "fixed",
+      x: r.left,
+      y: r.top,
+      w: r.width,
+      panelLeft: document.getElementById("panel").getBoundingClientRect().left,
+      saved: JSON.parse(localStorage.getItem("flybrainfpv.panel") ?? "null")?.floating?.[id] ?? null,
+    };
+  }, id);
+await page.click('[data-section="eyes"] .card-float');
+const fl = await floatInfo("eyes");
+check(fl.floating && fl.fixed && fl.x + fl.w <= fl.panelLeft, `the float button floats a section over the view (x ${fl.x.toFixed(0)})`);
+const eg = await (await page.$('[data-section="eyes"] .card-grip')).boundingBox();
+await page.mouse.move(eg.x + eg.width / 2, eg.y + eg.height / 2);
+await page.mouse.down();
+for (let k = 1; k <= 20; k++) await page.mouse.move(eg.x + eg.width / 2 + ((300 - fl.x) * k) / 20, eg.y + eg.height / 2 + ((400 - fl.y) * k) / 20);
+await page.mouse.up();
+const fm = await floatInfo("eyes");
+check(
+  Math.abs(fm.x - 300) < 3 && Math.abs(fm.y - 400) < 3 && Math.abs(fm.saved?.x - fm.x) < 1,
+  `dragging a floating section's grip moves it anywhere, and it is saved (at ${fm.x.toFixed(0)}, ${fm.y.toFixed(0)})`,
+);
+check(
+  await page.evaluate(() => document.getElementById("eye").width > 0 && getComputedStyle(document.getElementById("eye")).display !== "none"),
+  "its canvas still draws",
+);
+await page.screenshot({ path: `${out}/floating.png` });
+await page.click('[data-section="eyes"] .card-grip', { button: "right" });
+const fd = await floatInfo("eyes");
+check(!fd.floating && !fd.fixed && fd.saved === null && (await order()).join() === before.join(), "a right-click on its grip docks it back in its place");
+await page.click('[data-section="brain"] .card-grip', { button: "right" });
+check((await floatInfo("brain")).floating, "a right-click on a docked grip floats it");
+await page.click("#resetLayout");
+check(!(await floatInfo("brain")).floating, "Reset layout docks floating sections");
 
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(" | ")}` : ""}`);
 await browser.close();

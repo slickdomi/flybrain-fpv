@@ -57,7 +57,7 @@ async function main() {
     if (measuring) requestAnimationFrame(measure);
   };
   requestAnimationFrame(measure);
-  // side panel sections: collapse, pin to the top, drag by the grip (remembered per browser), right away, while loading
+  // side panel sections: collapse, pin to the top, drag by the grip, float (desktop; remembered per browser), right away, while loading
   const panelLayout = setupPanel($("panel"));
   $("resetLayout").addEventListener("click", () => panelLayout.reset());
   const loadLabel = $("loadLabel");
@@ -885,12 +885,27 @@ async function main() {
     /** and the renderer (its pickRay, view and zoom), for the phone check (web/scripts/check-mobile.mjs) */
     renderer,
     release,
+    /** the GPU pieces, and a way to hold the frame loop, for timing them one at a time (web/scripts/profile.mjs) */
+    brain,
+    get brainView() {
+      return brainView;
+    },
+    suspend: (on: boolean) => (suspended = on),
   };
 
   // ---- loop -------------------------------------------------------------------------------------
   let last = performance.now();
+  /** held by profile.mjs while it times the GPU passes on their own */
+  let suspended = false;
+  /** ms since the panel views and the HUD were last redrawn (LOOP.panelMs) */
+  let panelDt = LOOP.panelMs;
   let budget = LOOP.maxBrainMsPerFrame;
   const frame = (now: number) => {
+    if (suspended) {
+      last = now;
+      requestAnimationFrame(frame);
+      return;
+    }
     const elapsed = now - last;
     last = now;
     const realDt = Math.min(100, elapsed);
@@ -934,11 +949,17 @@ async function main() {
     const encoder = device.createCommandEncoder({ label: "frame" });
     if (brainMs > 0) brain.encode(encoder, brainMs);
     renderer.render(encoder, world, now / 1000);
-    // the panel's brain and eye views, only while they are on screen (on a phone the panel is scrolled away)
-    if (panelShown) brainView.render(encoder, realDt);
+    // the panel's brain and eye views, only while they are on screen (on a phone the panel is scrolled away), and the
+    // HUD: at most every LOOP.panelMs
+    panelDt += realDt;
+    const panelDue = panelDt >= LOOP.panelMs;
+    if (panelShown && panelDue) brainView.render(encoder, panelDt);
     device.queue.submit([encoder.finish()]);
     if (brainMs > 0) brain.afterSubmit();
-    updateHud();
+    if (panelDue) {
+      updateHud();
+      panelDt = 0;
+    }
     osd.draw(world, { mode: renderer.mode, brainSpeed, fps, seizure: renderer.seizure, escape: renderer.escape, paused, locked: food.locked, diving: food.diving });
     requestAnimationFrame(frame);
   };

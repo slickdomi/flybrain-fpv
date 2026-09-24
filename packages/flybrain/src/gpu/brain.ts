@@ -42,6 +42,55 @@ type Slot = "u" | "ud" | "r" | "rw";
 
 const align4 = (x: number) => Math.max(8, Math.ceil(x / 4) * 4);
 
+/**
+ * Workgroups in each scatter dispatch (scatter.wgsl: one spike per workgroup at a time, taken in turn). A step has a
+ * few dozen spikes, a few hundred in a burst; more workgroups than spikes just return.
+ */
+const SCATTER_GROUPS = 256;
+/** couple.wgsl: longer graded-input rows than this are summed by a workgroup, not a thread */
+const LONG_ROW = 128;
+/** rows per slice in slicedEll(); graded.wgsl and couple.wgsl step through a row's entries by it */
+const ELL_SLICE = 64;
+/** slicedEll(): a row left out (longer than its maxLen) */
+const ELL_SKIP = 0xffffffff;
+
+/**
+ * A CSR matrix of {col: u32, val: f32} entries re-laid for one thread per row: rows in slices of ELL_SLICE, each
+ * slice padded to its longest row and its entries interleaved, so entry k of the slice's row j sits at
+ * start + k * ELL_SLICE. Neighbouring threads then read neighbouring entries (in CSR each read a cache line of its
+ * own), and every row still adds its entries up in the same order, so the sums are bit for bit the same. `rows` holds
+ * (start, length) per row; a row longer than `maxLen` gets length ELL_SKIP and nothing in the slice.
+ */
+function slicedEll(offsets: Uint32Array, entries: ArrayBuffer, maxLen = Infinity): { rows: Uint32Array; entries: Uint32Array } {
+  const nRows = offsets.length - 1;
+  const rows = new Uint32Array(2 * nRows);
+  let total = 0;
+  for (let s = 0; s < nRows; s += ELL_SLICE) {
+    const end = Math.min(s + ELL_SLICE, nRows);
+    let width = 0;
+    for (let i = s; i < end; i++) {
+      const len = offsets[i + 1] - offsets[i];
+      rows[2 * i] = total + (i - s);
+      rows[2 * i + 1] = len <= maxLen ? len : ELL_SKIP;
+      if (len <= maxLen) width = Math.max(width, len);
+    }
+    total += width * ELL_SLICE;
+  }
+  const src = new Uint32Array(entries);
+  const out = new Uint32Array(2 * Math.max(1, total));
+  for (let i = 0; i < nRows; i++) {
+    const len = rows[2 * i + 1];
+    if (len === ELL_SKIP) continue;
+    for (let k = 0; k < len; k++) {
+      const from = 2 * (offsets[i] + k);
+      const to = 2 * (rows[2 * i] + k * ELL_SLICE);
+      out[to] = src[from];
+      out[to + 1] = src[from + 1];
+    }
+  }
+  return { rows, entries: out };
+}
+
 function infoOf(d: BrainData): ConnectomeInfo {
   return {
     meta: d.meta, types: d.types, n: d.n, ng: d.ng, typeId: d.typeId, side: d.side, superclass: d.superclass, nt: d.nt,
@@ -79,6 +128,8 @@ export class GpuBrain implements FlyBrain {
   private contrastDirty = false;
   private plasticEdges: GPUBuffer;
   private plasticCount: number;
+  /** spiking cells whose graded input rows are longer than LONG_ROW (couple.wgsl longRows) */
+  private longRows: number;
   private drive: DriveTable;
   private maxSteps: number;
   private maxSpikes: number;
@@ -94,6 +145,7 @@ export class GpuBrain implements FlyBrain {
     scatter: GPUComputePipeline;
     graded: GPUComputePipeline;
     couple: GPUComputePipeline;
+    coupleLong: GPUComputePipeline;
     probe: GPUComputePipeline;
     /** only one of these two paths exists: the CPU-fed retina, or the scene-sampling eye */
     retina?: GPUComputePipeline;
@@ -150,12 +202,18 @@ export class GpuBrain implements FlyBrain {
     const plasticOffsets = make(4 * (d.n + 1), S, d.plastic?.offsets, "plasticOffsets");
     this.plasticCount = d.plastic?.packed.length ?? 0;
     this.plasticEdges = make(4 * this.plasticCount, S | CD, d.plastic?.packed, "plasticEdges");
-    const gOffsets = make(d.gradedOffsets.byteLength, S, d.gradedOffsets, "gradedOffsets");
-    const gEntries = make(d.gradedEntries.byteLength, S, d.gradedEntries, "gradedEntries");
+    // the graded optic lobe and the short rows of the coupling as sliced ELL (slicedEll); the long coupling rows stay
+    // CSR, for couple.wgsl longRows
+    const gEll = slicedEll(d.gradedOffsets, d.gradedEntries);
+    const gRows = make(gEll.rows.byteLength, S, gEll.rows, "gradedRows");
+    const gEntries = make(gEll.entries.byteLength, S, gEll.entries, "gradedEntries");
+    const iEll = slicedEll(d.ifaceOffsets, d.ifaceEntries, LONG_ROW);
+    const iRows = make(iEll.rows.byteLength, S, iEll.rows, "ifaceRows");
+    const iEllEntries = make(iEll.entries.byteLength, S, iEll.entries, "ifaceEllEntries");
     const iOffsets = make(d.ifaceOffsets.byteLength, S, d.ifaceOffsets, "iOffsets");
     const iEntries = make(d.ifaceEntries.byteLength, S, d.ifaceEntries, "iEntries");
-    this.gradedA = make(4 * d.ng, S | CS, undefined, "gradedA");
-    this.gradedB = make(4 * d.ng, S | CS, undefined, "gradedB");
+    this.gradedA = make(4 * d.ng, S | CD | CS, undefined, "gradedA");
+    this.gradedB = make(4 * d.ng, S | CD | CS, undefined, "gradedB");
     const ext = make(4 * d.ng, S, undefined, "ext");
     const modeData = new Uint32Array(d.ng);
     const unitU = new Uint32Array(d.visUnits);
@@ -195,8 +253,21 @@ export class GpuBrain implements FlyBrain {
 
     const neuron = pipeline(commonSrc + neuronSrc, ["u", "ud", "rw", "r", "r", "rw", "rw", "rw"]);
     const scatter = pipeline(commonSrc + scatterSrc, ["u", "ud", "r", "rw", "r", "r", "rw", "r", "r"]);
-    const graded = pipeline(commonSrc + gradedSrc, ["u", "r", "r", "r", "rw", "r", "r"]);
-    const couple = pipeline(commonSrc + coupleSrc, ["u", "r", "r", "r", "rw"]);
+    const ell = `const ELL_SLICE = ${ELL_SLICE}u;\nconst ELL_SKIP = ${ELL_SKIP}u;\n`;
+    const graded = pipeline(ell + commonSrc + gradedSrc, ["u", "r", "r", "r", "rw", "r", "r"]);
+    // couple.wgsl: rows longer than LONG_ROW (a few percent of them, up to thousands of entries) get a workgroup each
+    const coupleSrcFull = ell + commonSrc + coupleSrc;
+    const couple = pipeline(coupleSrcFull, ["u", "r", "r", "r", "rw", "r", "r", "r"]);
+    const coupleLong = device.createComputePipeline({
+      layout: device.createPipelineLayout({ bindGroupLayouts: [couple.bgl] }),
+      compute: { module: device.createShaderModule({ code: coupleSrcFull }), entryPoint: "longRows" },
+    });
+    const io = d.ifaceOffsets;
+    const longList: number[] = [];
+    for (let r = 0; r + 1 < io.length; r++) if (io[r + 1] - io[r] > LONG_ROW) longList.push(r);
+    this.longRows = longList.length;
+    // bound at its exact size: the shader loops to arrayLength (the buffer itself is at least 8 bytes)
+    const longIdx: [GPUBuffer, number] = [make(4 * longList.length, S, new Uint32Array(longList), "coupleLongRows"), 4 * Math.max(1, longList.length)];
     const probe = pipeline(commonSrc + probeSrc, ["r", "r", "rw"]);
 
     // Either the CPU-fed retina pass or the scene-sampling eye, never both. Both write the same `ext`
@@ -218,7 +289,7 @@ export class GpuBrain implements FlyBrain {
 
     this.probeLayout = probe.bgl;
     this.pipes = {
-      neuron: neuron.p, scatter: scatter.p, graded: graded.p, couple: couple.p, probe: probe.p,
+      neuron: neuron.p, scatter: scatter.p, graded: graded.p, couple: couple.p, coupleLong, probe: probe.p,
       retina: retina?.p, eyeMean, eyeContrast,
     };
     const step: [GPUBuffer, number] = [this.stepBuf, 16];
@@ -226,12 +297,12 @@ export class GpuBrain implements FlyBrain {
       neuron: group(neuron.bgl, [this.params, step, this.neurons, this.baseDrive, gDrive, this.ring, spikes, this.spikeCount]),
       scatter: group(scatter.bgl, [this.params, step, spikes, this.spikeCount, spikeOffsets, spikeEdges, this.ring, plasticOffsets, this.plasticEdges]),
       graded: [
-        group(graded.bgl, [this.params, gOffsets, gEntries, this.gradedA, this.gradedB, ext, mode]),
-        group(graded.bgl, [this.params, gOffsets, gEntries, this.gradedB, this.gradedA, ext, mode]),
+        group(graded.bgl, [this.params, gRows, gEntries, this.gradedA, this.gradedB, ext, mode]),
+        group(graded.bgl, [this.params, gRows, gEntries, this.gradedB, this.gradedA, ext, mode]),
       ],
       couple: [
-        group(couple.bgl, [this.params, iOffsets, iEntries, this.gradedA, gDrive]),
-        group(couple.bgl, [this.params, iOffsets, iEntries, this.gradedB, gDrive]),
+        group(couple.bgl, [this.params, iOffsets, iEntries, this.gradedA, gDrive, longIdx, iRows, iEllEntries]),
+        group(couple.bgl, [this.params, iOffsets, iEntries, this.gradedB, gDrive, longIdx, iRows, iEllEntries]),
       ],
       retina: retina ? group(retina.bgl, [this.units, this.contrast, ext]) : undefined,
       eye: eyeGroup,
@@ -407,6 +478,10 @@ export class GpuBrain implements FlyBrain {
         pass.setPipeline(this.pipes.couple);
         pass.setBindGroup(0, this.groups.couple[this.gradedCurrent]);
         pass.dispatchWorkgroups(Math.ceil(ns / 256));
+        if (this.longRows > 0) {
+          pass.setPipeline(this.pipes.coupleLong);
+          pass.dispatchWorkgroups(Math.min(this.longRows, 65535));
+        }
         this.nextGraded += m.gradedDt;
       }
       const off = [this.stepAlign * s];
@@ -415,7 +490,7 @@ export class GpuBrain implements FlyBrain {
       pass.dispatchWorkgroups(Math.ceil(ns / 256));
       pass.setPipeline(this.pipes.scatter);
       pass.setBindGroup(0, this.groups.scatter, off);
-      pass.dispatchWorkgroups(Math.ceil(this.maxSpikes / 64));
+      pass.dispatchWorkgroups(SCATTER_GROUPS);
       this.brainTime += m.dt;
     }
     this.t += steps;

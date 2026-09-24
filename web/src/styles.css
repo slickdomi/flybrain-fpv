@@ -90,6 +90,20 @@ body { display: flex; overflow: hidden; }
 .card-grip:hover, .card-grip:focus-visible { opacity: 1; color: var(--text); }
 .card-grip:active { cursor: grabbing; }
 .card.dragging { opacity: 0.35; }
+/* the float button, and floating cards, only on a desktop (panel.ts DESKTOP): a window of its own over the view,
+   resized at its bottom-right corner; the canvases follow its width */
+.card-float { display: none; cursor: pointer; padding: 2px 4px; background: none; border: 0; color: var(--dim); border-radius: 4px; }
+.card-float[aria-pressed="true"] { color: var(--accent); }
+.card-float:hover { color: var(--text); }
+@media (min-width: 821px) and (pointer: fine) {
+  .card-float { display: block; }
+  .card.floating {
+    position: fixed; z-index: 30; min-width: 220px; max-width: 100vw; max-height: 100vh; overflow: auto; resize: horizontal;
+    box-shadow: 0 10px 30px #000c; border-color: #33415a;
+  }
+  .card.floating .card-pin { display: none; }
+  .card.floating.moving { opacity: 0.9; }
+}
 .drop-marker { flex: none; height: 3px; margin: -6px 4px; border-radius: 2px; background: var(--accent); }
 .panel-foot { display: flex; justify-content: center; }
 .panel-foot button {

@@ -165,6 +165,12 @@ export const LOOP = {
   minRenderScale: 0.5,
   maxStepsPerFrame: 128,
   maxSpikesPerStep: 8192,
+  /**
+   * the panel's brain and eye views and the HUD's text and bars are redrawn at most this often (ms): every other frame at
+   * 60 Hz. They are there to be glanced at, and redrawing them costs the GPU (166,700 points, twice) and the page a
+   * layout each time
+   */
+  panelMs: 31,
   seizureSpikesPerSec: 90000,
   seizureMs: 300,
 };
